@@ -29,6 +29,7 @@
 #include <main/SAPI.h>
 #include <Zend/zend_smart_str.h>
 #include <ext/standard/file.h>
+#include <ext/standard/url.h>
 
 #include "kernel/main.h"
 #include "kernel/memory.h"
@@ -64,6 +65,10 @@
  */
 zend_class_entry *phalcon_http_request_ce;
 
+PHP_METHOD(Phalcon_Http_Request, setMethod);
+PHP_METHOD(Phalcon_Http_Request, setURI);
+PHP_METHOD(Phalcon_Http_Request, setHeaders);
+PHP_METHOD(Phalcon_Http_Request, setRawBody);
 PHP_METHOD(Phalcon_Http_Request, _get);
 PHP_METHOD(Phalcon_Http_Request, get);
 PHP_METHOD(Phalcon_Http_Request, getPost);
@@ -117,6 +122,22 @@ PHP_METHOD(Phalcon_Http_Request, getBestLanguage);
 PHP_METHOD(Phalcon_Http_Request, getBasicAuth);
 PHP_METHOD(Phalcon_Http_Request, getDigestAuth);
 
+ZEND_BEGIN_ARG_INFO_EX(arginfo_phalcon_http_request_setmethod, 0, 0, 1)
+	ZEND_ARG_TYPE_INFO(0, method, IS_STRING, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_phalcon_http_request_seturi, 0, 0, 1)
+	ZEND_ARG_TYPE_INFO(0, uri, IS_STRING, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_phalcon_http_request_setheaders, 0, 0, 1)
+	ZEND_ARG_TYPE_INFO(0, headers, IS_ARRAY, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_phalcon_http_request_setrawbody, 0, 0, 1)
+	ZEND_ARG_TYPE_INFO(0, rawBody, IS_STRING, 0)
+ZEND_END_ARG_INFO()
+
 ZEND_BEGIN_ARG_INFO_EX(arginfo_phalcon_http_request__get, 0, 0, 5)
 	ZEND_ARG_INFO(0, name)
 	ZEND_ARG_INFO(0, filters)
@@ -126,6 +147,10 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_phalcon_http_request__get, 0, 0, 5)
 ZEND_END_ARG_INFO()
 
 static const zend_function_entry phalcon_http_request_method_entry[] = {
+	PHP_ME(Phalcon_Http_Request, setMethod, arginfo_phalcon_http_request_setmethod, ZEND_ACC_PUBLIC)
+	PHP_ME(Phalcon_Http_Request, setURI, arginfo_phalcon_http_request_seturi, ZEND_ACC_PUBLIC)
+	PHP_ME(Phalcon_Http_Request, setHeaders, arginfo_phalcon_http_request_setheaders, ZEND_ACC_PUBLIC)
+	PHP_ME(Phalcon_Http_Request, setRawBody, arginfo_phalcon_http_request_setrawbody, ZEND_ACC_PUBLIC)
 	PHP_ME(Phalcon_Http_Request, _get, arginfo_phalcon_http_request__get, ZEND_ACC_PROTECTED)
 	PHP_ME(Phalcon_Http_Request, get, arginfo_phalcon_http_requestinterface_get, ZEND_ACC_PUBLIC)
 	PHP_ME(Phalcon_Http_Request, getPost, arginfo_phalcon_http_requestinterface_getpost, ZEND_ACC_PUBLIC)
@@ -189,12 +214,238 @@ PHALCON_INIT_CLASS(Phalcon_Http_Request){
 	PHALCON_REGISTER_CLASS_EX(Phalcon\\Http, Request, http_request, phalcon_di_injectable_ce, phalcon_http_request_method_entry, 0);
 
 	zend_declare_property_null(phalcon_http_request_ce, SL("_filter"), ZEND_ACC_PROTECTED);
+	zend_declare_property_null(phalcon_http_request_ce, SL("_contentType"), ZEND_ACC_PROTECTED);
 	zend_declare_property_null(phalcon_http_request_ce, SL("_rawBody"), ZEND_ACC_PROTECTED);
+	zend_declare_property_null(phalcon_http_request_ce, SL("_header"), ZEND_ACC_PROTECTED);
 	zend_declare_property_null(phalcon_http_request_ce, SL("_put"), ZEND_ACC_PROTECTED);
 
 	zend_class_implements(phalcon_http_request_ce, 1, phalcon_http_requestinterface_ce);
 
 	return SUCCESS;
+}
+
+static const char* phalcon_http_request_getmethod_helper()
+{
+	zval *value, *_SERVER, key = {};
+	const char *method = SG(request_info).request_method;
+	if (unlikely(!method)) {
+		PHALCON_STR(&key, "REQUEST_METHOD");
+
+		_SERVER = phalcon_get_global_str(SL("_SERVER"));
+		if (Z_TYPE_P(_SERVER) == IS_ARRAY) {
+			value = phalcon_hash_get(Z_ARRVAL_P(_SERVER), &key, BP_VAR_UNSET);
+			if (value && Z_TYPE_P(value) == IS_STRING) {
+				return Z_STRVAL_P(value);
+			}
+		}
+
+		return "";
+	}
+
+	return method;
+}
+
+/**
+ * Sets method
+ *
+ * @param string $method
+ * @return Phalcon\Http\Request
+ */
+PHP_METHOD(Phalcon_Http_Request, setMethod)
+{
+	zval *method, key = {}, *_SERVER;
+
+	phalcon_fetch_params(0, 1, 0, &method);
+
+	if (likely(!strcmp(sapi_module.name, "cli"))) {
+		php_error_docref(NULL, E_WARNING, "Not supported in %s", sapi_module.name);
+		RETURN_FALSE;
+	}
+
+	PHALCON_STR(&key, "REQUEST_METHOD");
+
+	_SERVER = phalcon_get_global_str(SL("_SERVER"));
+	phalcon_array_update_zval(_SERVER, &key, method, PH_COPY);
+	RETURN_TRUE;
+}
+
+/**
+ * Sets URI
+ *
+ * @param string $uri
+ * @return Phalcon\Http\Request
+ */
+PHP_METHOD(Phalcon_Http_Request, setURI)
+{
+	zval *uri, key = {}, *_SERVER;
+
+	phalcon_fetch_params(0, 1, 0, &uri);
+
+	if (likely(!strcmp(sapi_module.name, "cli"))) {
+		php_error_docref(NULL, E_WARNING, "Not supported in %s", sapi_module.name);
+		RETURN_FALSE;
+	}
+
+	PHALCON_STR(&key, "REQUEST_URI");
+
+	_SERVER = phalcon_get_global_str(SL("_SERVER"));
+	phalcon_array_update_zval(_SERVER, &key, uri, PH_COPY);
+	RETURN_TRUE;
+}
+
+static void phalcon_request_parser(zval *object, int arg, char *str)
+{
+	char *res = NULL, *var, *val, *separator = NULL;
+	zval array = {};
+	zend_string *var_name;
+	char *strtok_buf = NULL;
+	zend_long count = 0;
+
+	switch (arg) {
+		case  PARSE_GET:					/* GET data */
+		case  PARSE_POST:					/* POST data */
+		case  PARSE_STRING:					/* String data */
+			separator = (char *) estrdup(PG(arg_separator).input);
+		case  PARSE_COOKIE:					/* Cookie data */
+			separator = ";\0";
+		default:
+			return;
+	}
+
+	array_init(&array);
+
+	res = (char *) estrdup(str);
+
+	if (!res) {
+		return;
+	}
+
+	var = php_strtok_r(res, separator, &strtok_buf);
+
+	while (var) {
+		size_t val_len;
+		val = strchr(var, '=');
+
+		if (arg == PARSE_COOKIE) {
+			/* Remove leading spaces from cookie names, needed for multi-cookie header where ; can be followed by a space */
+			while (isspace(*var)) {
+				var++;
+			}
+			if (var == val || *var == '\0') {
+				goto next_cookie;
+			}
+		}
+
+		if (++count > PG(max_input_vars)) {
+			php_error_docref(NULL, E_WARNING, "Input variables exceeded " ZEND_LONG_FMT ". To increase the limit change max_input_vars in php.ini.", PG(max_input_vars));
+			break;
+		}
+
+		if (val) { /* have a value */
+			*val++ = '\0';
+			php_url_decode(var, strlen(var));
+			val_len = php_url_decode(val, strlen(val));
+			val = estrndup(val, val_len);
+		} else {
+			php_url_decode(var, strlen(var));
+			val_len = 0;
+			val = estrndup("", val_len);
+		}
+		phalcon_array_update_str_str(&array, val, strlen(val), val, val_len, PH_COPY);
+		efree(val);
+next_cookie:
+		var = php_strtok_r(NULL, separator, &strtok_buf);
+	}
+
+	if (arg != PARSE_COOKIE) {
+		efree(separator);
+	}
+
+	efree(res);
+	switch (arg) {
+		case  PARSE_GET:
+			var_name = zend_string_init("_GET", sizeof("_GET") - 1, 0);
+			Z_ADDREF_P(&array);
+			zend_hash_update_ind(&EG(symbol_table), var_name, &array);
+			zend_string_release(var_name);
+			break;
+		case  PARSE_POST:
+			var_name = zend_string_init("_POST", sizeof("_POST") - 1, 0);
+			Z_ADDREF_P(&array);
+			zend_hash_update_ind(&EG(symbol_table), var_name, &array);
+			zend_string_release(var_name);
+			break;
+		case  PARSE_STRING:
+			break;
+		case  PARSE_COOKIE:
+			var_name = zend_string_init("_COOKIE", sizeof("_COOKIE") - 1, 0);
+			Z_ADDREF_P(&array);
+			zend_hash_update_ind(&EG(symbol_table), var_name, &array);
+			zend_string_release(var_name);
+		default:
+			return;
+	}
+}
+
+/**
+ * Sets headers
+ *
+ * @param array $headers
+ * @return Phalcon\Http\Request
+ */
+PHP_METHOD(Phalcon_Http_Request, setHeaders)
+{
+	zval *headers, cookie = {}, content_type = {};
+
+	phalcon_fetch_params(0, 1, 0, &headers);
+
+	if (likely(!strcmp(sapi_module.name, "cli"))) {
+		php_error_docref(NULL, E_WARNING, "Not supported in %s", sapi_module.name);
+		RETURN_FALSE;
+	}
+
+	if (phalcon_array_isset_fetch_str(&content_type, headers, SL("Content-Type"))) {
+		phalcon_update_property_zval(getThis(), SL("_contentType"), &content_type);
+	}
+
+	if (phalcon_array_isset_fetch_str(&cookie, headers, SL("Cookie"))) {
+		phalcon_request_parser(getThis(), PARSE_COOKIE, Z_STRVAL(cookie));
+	}
+
+	phalcon_update_property_zval(getThis(), SL("_header"), headers);
+	RETURN_THIS();
+}
+
+/**
+ * Sets raw body
+ *
+ * @param string $rawBody
+ * @return Phalcon\Http\Request
+ */
+PHP_METHOD(Phalcon_Http_Request, setRawBody)
+{
+	zval *raw_body, content_type = {};
+	int arg = PARSE_POST;
+
+	phalcon_fetch_params(0, 1, 0, &raw_body);
+
+	if (likely(!strcmp(sapi_module.name, "cli"))) {
+		php_error_docref(NULL, E_WARNING, "Not supported in %s", sapi_module.name);
+		RETURN_FALSE;
+	}
+
+	phalcon_return_property(&content_type, getThis(), SL("_contentType"));
+
+	if (!phalcon_memnstr_str(&content_type, SL("json"))) {
+		if (!strcmp(phalcon_http_request_getmethod_helper(), "GET")) {
+			arg = PARSE_GET;
+		}
+
+		phalcon_request_parser(getThis(), arg, Z_STRVAL_P(raw_body));
+	}
+
+	phalcon_update_property_zval(getThis(), SL("_rawBody"), raw_body);
+	RETURN_THIS();
 }
 
 /**
@@ -276,8 +527,8 @@ PHP_METHOD(Phalcon_Http_Request, _get)
  */
 PHP_METHOD(Phalcon_Http_Request, get)
 {
-	zval *name = NULL, *filters = NULL, *default_value = NULL, *not_allow_empty = NULL, *norecursive = NULL, *request;
-	zval put = {}, merged = {};
+	zval *name = NULL, *filters = NULL, *default_value = NULL, *not_allow_empty = NULL, *norecursive = NULL;
+	zval merged = {}, *request, put = {};
 
 	phalcon_fetch_params(0, 0, 5, &name, &filters, &default_value, &not_allow_empty, &norecursive);
 
@@ -302,7 +553,6 @@ PHP_METHOD(Phalcon_Http_Request, get)
 	}
 
 	request = phalcon_get_global_str(SL("_REQUEST"));
-
 	PHALCON_CALL_METHOD(&put, getThis(), "getput");
 
 	phalcon_fast_array_merge(&merged, request, &put);
@@ -356,6 +606,7 @@ PHP_METHOD(Phalcon_Http_Request, getPost)
 	}
 
 	post = phalcon_get_global_str(SL("_POST"));
+
 	PHALCON_RETURN_CALL_SELF("_get", post, name, filters, default_value, not_allow_empty, norecursive);
 }
 
@@ -657,7 +908,7 @@ PHP_METHOD(Phalcon_Http_Request, hasServer){
  */
 PHP_METHOD(Phalcon_Http_Request, hasHeader){
 
-	zval *header, *_SERVER, key = {};
+	zval *header, *_SERVER, key = {}, headers = {};
 
 	phalcon_fetch_params(0, 1, 0, &header);
 
@@ -671,6 +922,13 @@ PHP_METHOD(Phalcon_Http_Request, hasHeader){
 		RETURN_TRUE;
 	}
 
+	phalcon_read_property(&headers, getThis(), SL("_header"), PH_NOISY);
+	if (Z_TYPE(headers) == IS_ARRAY) {
+		if (phalcon_array_isset(&headers, header)) {
+			RETURN_TRUE;
+		}
+	}
+
 	RETURN_FALSE;
 }
 
@@ -682,9 +940,16 @@ PHP_METHOD(Phalcon_Http_Request, hasHeader){
  */
 PHP_METHOD(Phalcon_Http_Request, getHeader)
 {
-	zval *header, *_SERVER, key = {};
+	zval *header, *_SERVER, key = {}, headers = {};
 
 	phalcon_fetch_params(0, 1, 0, &header);
+
+	phalcon_read_property(&headers, getThis(), SL("_header"), PH_NOISY);
+	if (Z_TYPE(headers) == IS_ARRAY) {
+		if (phalcon_array_isset_fetch(return_value, &headers, header, 0)) {
+			return;
+		}
+	}
 
 	_SERVER = phalcon_get_global_str(SL("_SERVER"));
 	if (!phalcon_array_isset_fetch(return_value, _SERVER, header, 0)) {
@@ -1015,27 +1280,6 @@ PHP_METHOD(Phalcon_Http_Request, getClientAddress){
 	RETURN_FALSE;
 }
 
-static const char* phalcon_http_request_getmethod_helper()
-{
-	zval *value, *_SERVER, key = {};
-	const char *method = SG(request_info).request_method;
-	if (unlikely(!method)) {
-		PHALCON_STR(&key, "REQUEST_METHOD");
-
-		_SERVER = phalcon_get_global_str(SL("_SERVER"));
-		if (Z_TYPE_P(_SERVER) == IS_ARRAY) {
-			value = phalcon_hash_get(Z_ARRVAL_P(_SERVER), &key, BP_VAR_UNSET);
-			if (value && Z_TYPE_P(value) == IS_STRING) {
-				return Z_STRVAL_P(value);
-			}
-		}
-
-		return "";
-	}
-
-	return method;
-}
-
 /**
  * Gets HTTP method which request has been made
  *
@@ -1043,9 +1287,11 @@ static const char* phalcon_http_request_getmethod_helper()
  */
 PHP_METHOD(Phalcon_Http_Request, getMethod){
 
-	const char *method = phalcon_http_request_getmethod_helper();
-	if (method) {
-		RETURN_STRING(method);
+	const char *m;
+
+	m = phalcon_http_request_getmethod_helper();
+	if (m) {
+		RETURN_STRING(m);
 	}
 
 	RETURN_EMPTY_STRING();

@@ -108,6 +108,21 @@ int phalcon_read_global_str(zval *return_value, const char *global, unsigned int
 	return 0;
 }
 
+
+int phalcon_write_global_str(const char *global, unsigned int global_length, zval *value) {
+   if (PG(auto_globals_jit)) {
+	   zend_is_auto_global_str((char *)global, global_length);
+   }
+
+   if (&EG(symbol_table)) {
+		Z_TRY_ADDREF_P(value);
+		zend_hash_str_update(&EG(symbol_table), global, global_length, value);
+		return 1;
+   }
+
+   return 0;
+}
+
 zval* phalcon_get_global_str(const char *global, unsigned int global_length) {
 
 	if (PG(auto_globals_jit)) {
